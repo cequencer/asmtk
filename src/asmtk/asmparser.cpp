@@ -12,39 +12,8 @@ namespace asmtk {
 using namespace asmjit;
 
 // ============================================================================
-// [asmtk::X86RegInfo]
+// [asmtk::X86Alias]
 // ============================================================================
-
-// TODO: Information about a register should be part of asmjit.
-struct X86RegInfo {
-  RegInfo info;
-  uint32_t count;
-};
-
-#define DEFINE_REG(opType, regType, kind, size, count) \
-  {{{ uint8_t(opType), uint8_t(regType), uint8_t(kind), uint8_t(size) }}, count }
-static const X86RegInfo x86RegInfo[X86Reg::kRegCount] = {
-  DEFINE_REG(Operand::kOpNone, X86Reg::kRegNone        , 0                , 0 , 0  ),
-  DEFINE_REG(Operand::kOpNone, X86Reg::kRegNone        , 0                , 0 , 0  ),
-  DEFINE_REG(Operand::kOpReg , X86Reg::kRegRip         , X86Reg::kKindRip , 8 , 1  ),
-  DEFINE_REG(Operand::kOpReg , X86Reg::kRegSeg         , X86Reg::kKindSeg , 2 , 7  ),
-  DEFINE_REG(Operand::kOpReg , X86Reg::kRegGpbLo       , X86Reg::kKindGp  , 1 , 16 ),
-  DEFINE_REG(Operand::kOpReg , X86Reg::kRegGpbHi       , X86Reg::kKindGp  , 1 , 4  ),
-  DEFINE_REG(Operand::kOpReg , X86Reg::kRegGpw         , X86Reg::kKindGp  , 2 , 16 ),
-  DEFINE_REG(Operand::kOpReg , X86Reg::kRegGpd         , X86Reg::kKindGp  , 4 , 16 ),
-  DEFINE_REG(Operand::kOpReg , X86Reg::kRegGpq         , X86Reg::kKindGp  , 8 , 16 ),
-  DEFINE_REG(Operand::kOpReg , X86Reg::kRegFp          , X86Reg::kKindFp  , 10, 8  ),
-  DEFINE_REG(Operand::kOpReg , X86Reg::kRegMm          , X86Reg::kKindMm  , 8 , 8  ),
-  DEFINE_REG(Operand::kOpReg , X86Reg::kRegK           , X86Reg::kKindK   , 8 , 8  ),
-  DEFINE_REG(Operand::kOpReg , X86Reg::kRegXmm         , X86Reg::kKindVec , 16, 32 ),
-  DEFINE_REG(Operand::kOpReg , X86Reg::kRegYmm         , X86Reg::kKindVec , 32, 32 ),
-  DEFINE_REG(Operand::kOpReg , X86Reg::kRegZmm         , X86Reg::kKindVec , 64, 32 ),
-  DEFINE_REG(Operand::kOpNone, X86Reg::kRegNone        , 0                , 0 , 0  ),
-  DEFINE_REG(Operand::kOpReg , X86Reg::kRegBnd         , X86Reg::kKindBnd , 16, 4  ),
-  DEFINE_REG(Operand::kOpReg , X86Reg::kRegCr          , X86Reg::kKindCr  , 8 , 16 ),
-  DEFINE_REG(Operand::kOpReg , X86Reg::kRegDr          , X86Reg::kKindDr  , 8 , 16 )
-};
-#undef DEFINE_REG
 
 enum X86Alias {
   kX86AliasStart = 0x00010000U,
@@ -259,10 +228,10 @@ TrySpBpSiDi:
   if (s != sEnd) return false;
 
   // Fail if the register index is greater than allowed.
-  if (regId >= x86RegInfo[regType].count) return false;
+  if (regId >= x86OpData.archRegs.regCount[regType]) return false;
 
 Done:
-  op._initReg(x86RegInfo[regType].info.signature, regId);
+  op._initReg(x86OpData.archRegs.regInfo[regType].signature, regId);
   return true;
 }
 
@@ -601,14 +570,14 @@ static uint32_t x86ParseOption(const uint8_t* s, size_t len) {
 
 static uint32_t x86ParseAlias(const uint8_t* s, size_t len) {
   if (len < 3)
-    return kInvalidInst;
+    return Globals::kInvalidInstId;
 
   uint32_t d0 = (static_cast<uint32_t>(s[0]) << 24) +
                 (static_cast<uint32_t>(s[1]) << 16) +
                 (static_cast<uint32_t>(s[2]) <<  8) ;
   if (len == 3) {
     if (d0 == COMB_CHAR_4('s', 'a', 'l', 0)) return X86Inst::kIdShl;
-    return kInvalidInst;
+    return Globals::kInvalidInstId;
   }
 
   d0 += (static_cast<uint32_t>(s[3]) << 0);
@@ -616,7 +585,7 @@ static uint32_t x86ParseAlias(const uint8_t* s, size_t len) {
     if (d0 == COMB_CHAR_4('i', 'n', 's', 'b')) return kX86AliasInsb;
     if (d0 == COMB_CHAR_4('i', 'n', 's', 'd')) return kX86AliasInsd;
     if (d0 == COMB_CHAR_4('i', 'n', 's', 'w')) return kX86AliasInsw;
-    return kInvalidInst;
+    return Globals::kInvalidInstId;
   }
 
   uint32_t d1 = (static_cast<uint32_t>(s[4]) << 24);
@@ -642,10 +611,10 @@ static uint32_t x86ParseAlias(const uint8_t* s, size_t len) {
       if (d1 == COMB_CHAR_4('b', 0, 0, 0)) return kX86AliasOutsb;
       if (d1 == COMB_CHAR_4('d', 0, 0, 0)) return kX86AliasOutsd;
       if (d1 == COMB_CHAR_4('w', 0, 0, 0)) return kX86AliasOutsw;
-      return kInvalidInst;
+      return Globals::kInvalidInstId;
     }
     else {
-      return kInvalidInst;
+      return Globals::kInvalidInstId;
     }
 
     if (d1 == COMB_CHAR_4('b', 0, 0, 0)) return base + 0;
@@ -653,7 +622,7 @@ static uint32_t x86ParseAlias(const uint8_t* s, size_t len) {
     if (d1 == COMB_CHAR_4('q', 0, 0, 0)) return base + 2;
     if (d1 == COMB_CHAR_4('w', 0, 0, 0)) return base + 3;
 
-    return kInvalidInst;
+    return Globals::kInvalidInstId;
   }
 
   d1 += static_cast<uint32_t>(s[5]) << 16;
@@ -661,7 +630,7 @@ static uint32_t x86ParseAlias(const uint8_t* s, size_t len) {
     if (d0 == COMB_CHAR_4('m', 'o', 'v', 'a') && d1 == COMB_CHAR_4('b', 's', 0, 0)) return kX86AliasMovabs;
   }
 
-  return kInvalidInst;
+  return Globals::kInvalidInstId;
 }
 
 static Error x86ParseInstruction(AsmParser& parser, uint32_t& instId, uint32_t& options, AsmToken* token) {
@@ -676,12 +645,12 @@ static Error x86ParseInstruction(AsmParser& parser, uint32_t& instId, uint32_t& 
 
     // Try to match instruction alias, as there are some tricky ones.
     instId = x86ParseAlias(lower, len);
-    if (instId == kInvalidInst) {
+    if (instId == Globals::kInvalidInstId) {
       // If that didn't work out, try to match instruction as defined by AsmJit.
       instId = X86Inst::getIdByName(reinterpret_cast<char*>(lower), len);
     }
 
-    if (instId == kInvalidInst) {
+    if (instId == Globals::kInvalidInstId) {
       // Maybe it's an option / prefix?
       uint32_t option = x86ParseOption(lower, len);
       if (!(option))
@@ -834,7 +803,7 @@ static Error x86FixupInstruction(AsmParser& parser, uint32_t& instId, uint32_t& 
 }
 
 Error AsmParser::parse(const char* input, size_t len) {
-  if (len == kInvalidIndex) len = ::strlen(input);
+  if (len == Globals::kInvalidIndex) len = ::strlen(input);
   if (len == 0) return kErrorOk;
 
   uint32_t archType = _emitter->getArchType();
